@@ -83,6 +83,7 @@ def clean_rows(
     rows: List[Dict[str, str]],
     *,
     apply_refund_window_fix: bool = True,
+    allow_garbage_chars: bool = False,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
     Trả về (cleaned, quarantine).
@@ -94,6 +95,7 @@ def clean_rows(
     4) Quarantine: chunk_text rỗng hoặc effective_date rỗng sau chuẩn hoá.
     5) Loại trùng nội dung chunk_text (giữ bản đầu).
     6) Fix stale refund: policy_refund_v4 chứa '14 ngày làm việc' → 7 ngày.
+    7) NEW: Thêm tùy chọn inject garbage (bỏ qua lọc ký tự rác/placeholder).
     """
     quarantine: List[Dict[str, Any]] = []
     seen_text: set[str] = set()
@@ -117,13 +119,13 @@ def clean_rows(
 
         # NEW RULE 2: Chứa ký tự rác, lỗi encoding hoặc placeholder chưa điền
         garbage_patterns = [r"\ufffd", r"ERROR:", r"\[TODO\]", r"\[INSERT", r"\{placeholder\}"]
-        if any(re.search(p, text, re.IGNORECASE) for p in garbage_patterns):
+        if not allow_garbage_chars and any(re.search(p, text, re.IGNORECASE) for p in garbage_patterns):
             quarantine.append({**raw, "reason": "contains_garbage_or_placeholders"})
             continue
 
         # NEW RULE 3: Nội dung chunk không đủ ý nghĩa (quá ngắn hoặc toàn ký tự đặc biệt)
         norm_text = _norm_text(text)
-        if not _is_meaningful(norm_text):
+        if not allow_garbage_chars and not _is_meaningful(norm_text):
             quarantine.append({**raw, "reason": "non_meaningful_content"})
             continue
 

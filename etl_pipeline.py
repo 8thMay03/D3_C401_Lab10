@@ -69,6 +69,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     cleaned, quarantine = clean_rows(
         rows,
         apply_refund_window_fix=not args.no_refund_fix,
+        allow_garbage_chars=bool(args.inject_garbage),
     )
     cleaned_path = CLEAN_DIR / f"cleaned_{run_id.replace(':', '-')}.csv"
     quar_path = QUAR_DIR / f"quarantine_{run_id.replace(':', '-')}.csv"
@@ -112,6 +113,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         "quarantine_records": len(quarantine),
         "latest_exported_at": latest_exported,
         "no_refund_fix": bool(args.no_refund_fix),
+        "inject_garbage": bool(args.inject_garbage),
         "skipped_validate": bool(args.skip_validate and halt),
         "cleaned_csv": str(cleaned_path.relative_to(ROOT)),
         "chroma_path": os.environ.get("CHROMA_DB_PATH", "./chroma_db"),
@@ -204,6 +206,11 @@ def main() -> int:
         "--skip-validate",
         action="store_true",
         help="Vẫn embed khi expectation halt (chỉ phục vụ demo có chủ đích).",
+    )
+    p_run.add_argument(
+        "--inject-garbage",
+        action="store_true",
+        help="Không lọc ký tự rác hoặc placeholder (chỉ dùng cho demo).",
     )
     p_run.set_defaults(func=cmd_run)
 
