@@ -5,7 +5,7 @@
 **Ngày nộp:** 15-04-2026  
 
 ---
-
+ID_SHA : `2392c0fc21a66583e9fadbb16c806b3131a2a229`  , ` c59494fea9a93374f97cf1bbc31c95c7305f2f61 `
 ## 1. Tôi phụ trách phần nào?
 
 **Nhiệm vụ chính:**
