@@ -9,6 +9,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
+from datetime import datetime
+from collections import defaultdict
 
 
 @dataclass
@@ -68,6 +70,41 @@ class DataValidator:
         self._expect_none(
             "hr_leave_no_stale_10d_annual", "halt",
             [r for r in self.rows if r.get("doc_id") == "hr_leave_policy" and "10 ngày phép năm" in (r.get("chunk_text") or "")]
+        )
+
+        # E7: Không có effective_date trong tương lai (data sanity check)
+        now = datetime.now().date()
+        future_rows = []
+        for r in self.rows:
+            d = (r.get("effective_date") or "").strip()
+            try:
+                if d and datetime.fromisoformat(d).date() > now:
+                    future_rows.append(r)
+            except Exception:
+                continue
+
+        self._expect_none(
+            "no_future_effective_date",
+            "warn",
+            future_rows,
+            "future_dates"
+        )
+
+        # E8: Một doc_id không nên có quá nhiều version (tránh version conflict)
+        versions = defaultdict(set)
+        for r in self.rows:
+            doc = r.get("doc_id", "")
+            eff = r.get("effective_date", "")
+            if doc and eff:
+                versions[doc].add(eff)
+
+        exploding_docs = [doc for doc, v in versions.items() if len(v) > 3]
+
+        self._expect(
+            "doc_id_version_explosion",
+            "warn",
+            len(exploding_docs) == 0,
+            f"docs_with_many_versions={len(exploding_docs)}"
         )
 
         halt = any(not r.passed and r.severity == "halt" for r in self.results)
