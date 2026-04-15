@@ -28,7 +28,24 @@ _DMY_SLASH = re.compile(r"^(\d{2})/(\d{2})/(\d{4})$")
 
 
 def _norm_text(s: str) -> str:
-    return " ".join((s or "").strip().split()).lower()
+    """Chuẩn hóa văn bản: xóa tags, khoảng trắng thừa, đưa về lowercase."""
+    # Xóa HTML tags nếu có
+    s = re.sub(r"<[^>]+>", " ", s)
+    # Loại bỏ các ký tự điều khiển (control characters) và chuẩn hóa khoảng trắng
+    s = " ".join((s or "").strip().split())
+    return s.lower()
+
+
+def _is_meaningful(text: str) -> bool:
+    """Kiểm tra xem chunk có đủ ý nghĩa để làm RAG context không."""
+    # Phải có ít nhất 3 từ
+    words = text.split()
+    if len(words) < 3:
+        return False
+    # Phải chứa ít nhất 1 ký tự alphanumeric (chữ hoặc số)
+    if not any(c.isalnum() for c in text):
+        return False
+    return True
 
 
 def _stable_chunk_id(doc_id: str, chunk_text: str, seq: int) -> str:
@@ -91,6 +108,23 @@ def clean_rows(
 
         if doc_id not in ALLOWED_DOC_IDS:
             quarantine.append({**raw, "reason": "unknown_doc_id"})
+            continue
+
+        # NEW RULE 1: Thiếu exported_at (Thời gian xuất dữ liệu)
+        if not exported_at.strip():
+            quarantine.append({**raw, "reason": "missing_exported_at"})
+            continue
+
+        # NEW RULE 2: Chứa ký tự rác, lỗi encoding hoặc placeholder chưa điền
+        garbage_patterns = [r"\ufffd", r"ERROR:", r"\[TODO\]", r"\[INSERT", r"\{placeholder\}"]
+        if any(re.search(p, text, re.IGNORECASE) for p in garbage_patterns):
+            quarantine.append({**raw, "reason": "contains_garbage_or_placeholders"})
+            continue
+
+        # NEW RULE 3: Nội dung chunk không đủ ý nghĩa (quá ngắn hoặc toàn ký tự đặc biệt)
+        norm_text = _norm_text(text)
+        if not _is_meaningful(norm_text):
+            quarantine.append({**raw, "reason": "non_meaningful_content"})
             continue
 
         eff_norm, eff_err = _normalize_effective_date(eff_raw)
