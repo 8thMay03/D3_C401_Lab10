@@ -46,6 +46,7 @@ Nguồn dữ liệu raw của nhóm là tệp CSV mẫu (giả định xuất kh
 | `refund_no_stale_14d_window` | Không lỗi (0 violations) | Phát hiện 1 violation (HALT) | Log terminal của luồng `inject-bad` |
 | `hr_leave_no_stale_10d_annual` | Không lỗi (0 violations) | 0 violations (trạng thái HALT)| Log pipeline trả về `OK (halt)` |
 | `effective_date_iso_yyyy_mm_dd` | Format chuẩn ISO (0 lỗi) | 0 violations (trạng thái HALT)| Ghi nhận từ `cleaned_official_fix.csv` |
+| `exported_at_not_in_future` | Khớp biểu mẫu (0 lỗi) | Phát hiện 1 violation (HALT)| Ghi nhận log khi chạy với raw data `policy_export_dirty_fail_exported_at.csv` |
 
 **Rule chính (baseline + mở rộng):**
 
@@ -53,11 +54,12 @@ Nguồn dữ liệu raw của nhóm là tệp CSV mẫu (giả định xuất kh
 - `refund_no_stale_14d_window`: Rào chắn chặn hoàn toàn luật "Hoàn tiền 14 ngày" cũ kĩ (Cờ HALT).
 - `hr_leave_no_stale_10d_annual`: Loại ngay luật "Ngày phép theo cơ chế cũ: 10 ngày" (Cờ HALT).
 - `effective_date_iso_yyyy_mm_dd`: Force dữ liệu ngày tháng bắt buộc theo định dạng năm/tháng/ngày - chuẩn ISO (Cờ HALT).
+- `exported_at_not_in_future`: Chặn ngay tập dữ liệu khai khống thời gian ở tương lai đối với trường xuất metadata (Cờ HALT).
 - Cảnh báo (WARN) đối với `no_future_effective_date` khi bắt gặp các luật chưa có hiệu lực.
 
 **Ví dụ 1 lần expectation fail (nếu có) và cách xử lý:**
 
-Khi nhóm tiến hành kích hoạt kịch bản tiêm tệp độc qua tham số `--run-id inject-bad`, phân hệ quality bắt quả tang tài liệu lỗi và expectation `refund_no_stale_14d_window` tức khắc báo `FAIL (halt) :: violations=1`. Module sau đó tự động cô lập, vứt luật hỏng vào `quarantine_inject-bad.csv` thay vì đẩy vào ChromaDB như bình thường.
+Khi nhóm tiến hành nạp dữ liệu từ tệp chứa lỗi `policy_export_dirty_fail_exported_at.csv`, phân hệ quality bắt quả tang tài liệu bị khai khống thời gian và expectation `exported_at_not_in_future` tức khắc báo `FAIL (halt) :: violations=1`. Module sau đó tự động cô lập, vứt luật hỏng vào file quarantine tương ứng thay vì đẩy vào ChromaDB như bình thường.
 
 ---
 
