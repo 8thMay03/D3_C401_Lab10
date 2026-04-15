@@ -1,0 +1,15 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+chroma_db/
+.pytest_cache/
+*.log
+day08/
+day09/
+# Hoặc loại trừ tất cả trừ day10:
+*
+!day10/
+!.gitignore
