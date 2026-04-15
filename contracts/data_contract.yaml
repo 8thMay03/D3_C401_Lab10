@@ -32,6 +32,15 @@ quality_rules:
   - id: "no_stale_refund_window"
     description: "Không được để chunk policy refund chứa cửa sổ 14 ngày (lệch so với v4 = 7 ngày)"
     severity: "halt"
+  - id: "no_future_effective_date"
+    description: "Không có effective_date trong tương lai (data sanity check)"
+    severity: "warn"
+  - id: "doc_id_version_explosion"
+    description: "Một doc_id không nên có quá nhiều version (tránh version conflict)"
+    severity: "warn"
+  - id: "exported_at_not_in_future"
+    description: "exported_at không được lớn hơn thời điểm hiện tại"
+    severity: "halt"
 
 freshness:
   measured_at: "publish"  # ingest | cleaned | publish

@@ -106,7 +106,15 @@ class DataValidator:
             len(exploding_docs) == 0,
             f"docs_with_many_versions={len(exploding_docs)}"
         )
-
+        # E9: exported_at không được lớn hơn thời điểm hiện tại
+        now_iso = datetime.now().isoformat()
+        future_exported = [r for r in self.rows if r.get("exported_at") and r.get("exported_at") > now_iso]
+        self._expect_none(
+            "exported_at_not_in_future",
+            "halt",
+            future_exported,
+            "future_exported_at"
+        )
         halt = any(not r.passed and r.severity == "halt" for r in self.results)
         return self.results, halt
 
