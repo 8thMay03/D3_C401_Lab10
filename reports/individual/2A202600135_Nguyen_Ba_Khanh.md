@@ -8,49 +8,50 @@
 
 ## 1. Tôi phụ trách phần nào?
 
-**File / module:**
-Tôi đóng vai trò **Embed Owner**. Nhiệm vụ chính của tôi nằm ở hàm `cmd_embed_internal` trong file `etl_pipeline.py`. Tôi chịu trách nhiệm khởi tạo kết nối với ChromaDB, thiết kế luồng đồng bộ văn bản đã được làm sạch (cleaned_csv) thành các vector embedding bằng model `all-MiniLM-L6-v2`, đồng thời đảm bảo pipeline chạy lại nhiều lần không sinh ra dữ liệu rác bằng cơ chế Idempotency dựa trên `chunk_id`. Cùng với đó, tôi dùng `eval_retrieval.py` để lấy bằng chứng đánh giá truy vấn.
+**Nhiệm vụ chính:**
+Trong dự án này, tôi là **Embed Owner**, focus chính vào hàm `cmd_embed_internal` trong file `etl_pipeline.py`. Công việc của tôi là nhận dữ liệu đã được làm sạch (từ file `cleaned.csv`), sau đó dùng model `all-MiniLM-L6-v2` để chuyển đổi các đoạn text này thành vector và lưu vào ChromaDB. Ngoài ra, tôi cũng phụ trách phần đánh giá chất lượng truy xuất bằng script `eval_retrieval.py`.
 
-**Kết nối với thành viên khác:**
-Tôi là chốt chặn cuối cùng của pipeline. Tôi làm việc trực tiếp với file đầu ra của Cleaning Owner. Tôi chỉ cho phép upsert vào ChromaDB khi mọi Expectation của Quality Owner báo PASS (không có cờ HALT).
+**Cách phối hợp với team:**
+tôi làm việc trực tiếp với kết quả đầu ra từ bạn Cleaning Owner. Tôi chỉ cho phép hệ thống ghi dữ liệu vào vector database khi tất cả các bài test (Expectation) của phần Quality đều đã báo PASS hoàn toàn, không có bất kỳ cảnh báo HALT nào cản đường.
 
-**Bằng chứng (commit / comment trong code):**
-Trong log của quá trình chạy `run_id=khanhemb`, tôi đã xác nhận quá trình embed thành công với dòng log:
+**Bằng chứng thực thi:**
+Khi chạy thử với `run_id=official_fix`, log trả về đã xác nhận luồng embed hoạt động trơn tru:
 `embed_upsert count=6 collection=day10_kb`
 
 ---
 
-## 2. Một quyết định kỹ thuật
+## 2. Một quyết định kỹ thuật đáng chú ý
 
-Để giải quyết bài toán Idempotency khi chạy lại pipeline, tôi không sử dụng thao tác `.add()` cơ bản của ChromaDB mà đổi sang dùng `.upsert()` dựa theo `chunk_id` băm tĩnh (từ `doc_id` + `chunk_text`). 
+Thay vì dùng hàm `.add()` mặc định của ChromaDB, tôi quyết định chuyển sang dùng `.upsert()` kết hợp với việc băm tĩnh `chunk_id` (ghép từ `doc_id` và `chunk_text`). Việc này giúp giải quyết triệt để bài toán Idempotency, nghĩa là dù pipeline có chạy đi chạy lại bao nhiêu lần thì dữ liệu cũng không bị rác hay đúp lại.
 
-Đồng thời, quyết định kỹ thuật quan trọng nhất là chiến lược **Prune IDs** (thu dọn "mồi cũ"). Khi policy hệ thống thay đổi (ví dụ có luật bị cách ly và mất đi), hệ thống bắt buộc phải kiểm tra tất cả các IDs đang tồn tại trong VectorDB và xóa sạch các IDs không còn nằm trong file `cleaned.csv` lần chạy mới nhất. Quyết định này thiết lập nên một "Publish Boundary" rạch ròi, phòng trừ trường hợp RAG Agent Day 09 truy xuất nhầm vào context đã bị thu hồi. Thể hiện qua dòng log: `embed_prune_removed=1` khi dọn rác.
-
----
-
-## 3. Một lỗi hoặc anomaly đã xử lý
-
-Trong Sprint 3, tôi phát hiện triệu chứng kết quả retrieval bị ô nhiễm bởi thông tin cũ (vấn đề "14 ngày hoàn tiền"), ảnh hưởng nghiêm trọng tới RAG Output. Tracking lỗi này bằng phương pháp đối chiếu, tôi chạy file test trước pipeline: `artifacts/eval/after_inject_khanhemb.csv`. Cờ `hits_forbidden` đột ngột báo `yes`.
-
-Tìm hiểu nguyên nhân: Khi cờ `--skip-validate` được kích hoạt trên hệ thống hỏng, pipeline đẩy thẳng bản raw lỗi vào Embed mà không qua bộ lọc. Lỗi này nếu lưu vào vector db sẽ bóp méo vĩnh viễn không gian vector của policy đó.
-Giải pháp & Fix: Khi chạy lại pipeline chuẩn không skip, nhờ logic "Prune IDs" đã cài đặt, nó tự động tìm ra `chunk_id` chứa văn bản "14 ngày" cũ không còn trong cleaned data và thanh trừng nó: `col.delete(ids=drop)`.
+Tuy nhiên, quyết định làm tôi tâm đắc nhất là cơ chế **Prune IDs** (dọn dẹp dữ liệu cũ). Khi hệ thống cập nhật một chính sách mới (ví dụ một luật cũ bị loại bỏ), ChromaDB bắt buộc phải rà soát lại toàn bộ ID nó đang giữ và xóa sạch các ID không còn xuất hiện trong file `cleaned.csv` mới nhất. Điều này tạo ra một "màng lọc" an toàn, đảm bảo RAG Agent ở các lab trước không lấy nhầm các thông tin đã out-date. Các bạn có thể thấy cơ chế này hoạt động qua dòng log đi dọn rác: `embed_prune_removed=1`.
 
 ---
 
-## 4. Bằng chứng trước / sau
+## 3. Quá trình fix một lỗi cụ thể
 
-Quá trình Prune được thể hiện rõ rệt qua 2 bộ log chạy Evaluation mà tôi đảm nhiệm đánh giá:
+Ở Sprint 3, tôi gặp phải một lỗi khá nghiêm trọng: kết quả retrieval bị lẫn lộn thông tin cũ (cụ thể là cái lỗi "14 ngày hoàn tiền" bị out-date), làm sai luôn đầu ra của RAG. Tôi chạy đối chiếu qua file test `artifacts/eval/after_inject_bad.csv` thì thấy cờ `hits_forbidden` chuyển đỏ sang trạng thái `yes` cái rụp.
 
-**Trước (run_id: `khanhemb-inject`):**
-Cờ `hits_forbidden` mắc bẫy nhận nhầm tài liệu cũ (`yes`).
-`q_refund_window,Khách...,policy_refund_v4,Yêu cầu được gửi trong vòng 14 ngày làm việc kể từ thời điểm xác nhận đơn hàng.,yes,yes,,3`
+Sau khi debug thì tôi tìm ra nguyên nhân là do lúc kích hoạt cờ `--skip-validate` trên hệ thống hỏng, pipeline xả thẳng dữ liệu raw lỗi, chưa qua kiểm duyệt vào quá trình Embed. Đống dữ liệu bẩn này nếu lọt vào Vector DB sẽ làm sai lệch không gian vector của chính sách đó mãi mãi.
 
-**Sau (run_id: `khanhemb-fix`):**
-Pipeline làm sạch mồi cũ. Cờ `hits_forbidden` trở lại an toàn (`no`).
-`q_refund_window,Khách...,policy_refund_v4,Yêu cầu được gửi trong vòng 7 ngày làm việc kể từ thời điểm xác nhận đơn hàng.,yes,no,,3`
+**Cách tôi sửa:** Khi tôi chạy lại pipeline chuẩn (với `run-id=official_fix`) và không truyền cờ skip nữa, cơ chế "Prune IDs" đã phát huy sức mạnh. Nó tự động quét, tóm cổ ngay được cái `chunk_id` chứa nội dung "14 ngày" tàn dư (do không có mặt trong file `cleaned_csv` xịn) và xóa thẳng tay thông qua lệnh `col.delete(ids=drop)`.
 
 ---
 
-## 5. Cải tiến tiếp theo
+## 4. Bằng chứng trước / sau khi fix lỗi
 
-Với thêm 2 giờ làm việc, tôi sẽ cập nhật thêm Metadata Filtering nâng cao lúc Embed. Tức là ánh xạ cấu trúc `doc_id` và `effective_date` làm metadata vào ChromaDB, giúp Agent Day 09 có thể truyền tham số metadata vào query (`where={"doc_id": "policy_refund_v4"}`) để tăng Precision 100% thay vì chỉ dùng K-NN vector similarity thuần túy dễ gây nhiễu chéo tài liệu.
+Các bạn có thể thấy rõ độ hiệu quả của cơ chế Prune qua 2 bộ log đánh giá:
+
+**Trước khi fix (run_id: `inject-bad`):**
+Cờ `hits_forbidden` dính bẫy vì nạp nhầm policy cũ (`yes`).
+`q_refund_window,Khách hàng có bao nhiêu ngày để yêu cầu hoàn tiền kể từ khi xác nhận đơn?,policy_refund_v4,Yêu cầu được gửi trong vòng 7 ngày làm việc kể từ thời điểm xác nhận đơn hàng.,yes,yes,,3`
+
+**Sau khi fix (run_id: `official_fix` - ghi vào `before_after_eval.csv`):**
+Pipeline đã dọn sạch sẽ đống dữ liệu thừa đó. Cờ `hits_forbidden` trở lại trạng thái an toàn (`no`).
+`q_refund_window,Khách hàng có bao nhiêu ngày để yêu cầu hoàn tiền kể từ khi xác nhận đơn?,policy_refund_v4,Yêu cầu được gửi trong vòng 7 ngày làm việc kể từ thời điểm xác nhận đơn hàng.,yes,no,,3`
+
+---
+
+## 5. Nếu có thêm thời gian
+
+Nếu còn dư thêm 2 tiếng ngồi code, tôi chắc chắn sẽ áp thêm kỹ thuật Metadata Filtering nâng cao vào Embed. Thay vì chỉ nạp vector chay, tôi sẽ gắn thêm `doc_id` và `effective_date` làm metadata trực tiếp trên ChromaDB. Truyền tham số vậy thì sau này Agent bên Lab 09 chỉ cần đẩy thêm điều kiện `where={"doc_id": "policy_refund_v4"}` vào query là độ chính xác (Precision) vọt lên 100%, chấm dứt hoàn toàn tình trạng bị nhiễu do tìm theo k-NN thuần túy.
