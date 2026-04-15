@@ -112,5 +112,29 @@ def run_expectations(cleaned_rows: List[Dict[str, Any]]) -> Tuple[List[Expectati
         )
     )
 
+    # E7: Không có cột 'reason' (dành cho quarantine) bị lọt vào cleaned payload
+    bad_reason = [r for r in cleaned_rows if "reason" in r and r.get("reason")]
+    ok7 = len(bad_reason) == 0
+    results.append(
+        ExpectationResult(
+            "no_quarantine_reason_in_cleaned",
+            ok7,
+            "halt",
+            f"leak_rows={len(bad_reason)}",
+        )
+    )
+
+    # E8: 100% dòng trong pipeline đã clean phải có `exported_at` để track freshness
+    bad_exported = [r for r in cleaned_rows if not (r.get("exported_at") or "").strip()]
+    ok8 = len(bad_exported) == 0
+    results.append(
+        ExpectationResult(
+            "has_exported_at_for_freshness",
+            ok8,
+            "halt",
+            f"missing_exported_at={len(bad_exported)}",
+        )
+    )
+
     halt = any(not r.passed and r.severity == "halt" for r in results)
     return results, halt

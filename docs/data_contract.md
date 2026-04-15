@@ -8,7 +8,9 @@
 
 | Nguồn | Phương thức ingest | Failure mode chính | Metric / alert |
 |-------|-------------------|-------------------|----------------|
-| … | … | … | … |
+| Hệ thống HR (DB) | CSV Export tự động | Thiếu/sai định dạng ngày hiệu lực (effective_date) | `missing_effective_date` / `non_iso_rows` cao |
+| CS Helpdesk (KB) | Đẩy file nội bộ (CSV) | Chứa version tài liệu cũ dẫn đến chính sách bị lệch | `stale_hr_policy` / Expectation halt |
+| Hệ thống IT | Manual Export | Trùng lặp chunk text, ID tài liệu lạ | `duplicate_chunk_text` / `unknown_doc_id` tăng |
 
 ---
 
